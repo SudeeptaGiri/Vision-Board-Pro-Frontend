@@ -1,0 +1,47 @@
+import { Router } from 'express';
+import { body } from 'express-validator';
+import * as aiController from '../controllers/ai.controller';
+import { authenticate } from '../middleware/auth';
+import { validate } from '../middleware/validate';
+
+const router = Router();
+
+router.use(authenticate);
+
+// Get questionnaire for goal type
+router.post(
+  '/questionnaire',
+  [
+    body('goalType').isIn(['ACHIEVEMENT', 'LEARNING', 'HEALTH', 'HABIT', 'FINANCIAL', 'CAREER', 'PERSONAL']),
+    body('goalTitle').trim().notEmpty(),
+  ],
+  validate,
+  aiController.getQuestionnaire
+);
+
+// Generate plan from answers
+router.post(
+  '/generate-plan',
+  [
+    body('goalId').isString(),
+    body('answers').isObject(),
+  ],
+  validate,
+  aiController.generatePlan
+);
+
+// Get task suggestions
+router.post(
+  '/suggest-tasks',
+  [
+    body('goalId').isString(),
+    body('context').optional().isString(),
+  ],
+  validate,
+  aiController.suggestTasks
+);
+
+// Get motivational message
+router.get('/motivation/:goalId', aiController.getMotivation);
+
+export default router;
