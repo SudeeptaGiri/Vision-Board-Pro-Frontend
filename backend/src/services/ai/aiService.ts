@@ -57,12 +57,12 @@ class AIService {
 ${QUESTIONNAIRE_PROMPTS[goalType]}`;
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-5-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.7,
+        temperature: 1,
         response_format: { type: 'json_object' },
       });
 
@@ -101,12 +101,12 @@ ${Object.entries(questionnaireAnswers)
 ${TASK_GENERATION_PROMPT}`;
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-5-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.7,
+        temperature: 1,
         response_format: { type: 'json_object' },
       });
 
@@ -129,7 +129,7 @@ ${TASK_GENERATION_PROMPT}`;
   ): Promise<{ suggestions: string[]; alternativeTasks: string[] }> {
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-5-mini',
         messages: [
           {
             role: 'system',
@@ -148,7 +148,7 @@ Provide suggestions to improve this task and alternative approaches. Return JSON
 }`,
           },
         ],
-        temperature: 0.7,
+        temperature: 1,
         response_format: { type: 'json_object' },
       });
 
@@ -174,7 +174,7 @@ Provide suggestions to improve this task and alternative approaches. Return JSON
   ): Promise<{ title: string; description: string; priority: string }[]> {
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-5-mini',
         messages: [
           {
             role: 'system',
@@ -195,7 +195,7 @@ Suggest 3-5 additional tasks that would help achieve this goal. Return JSON:
 }`,
           },
         ],
-        temperature: 0.7,
+        temperature: 1,
         response_format: { type: 'json_object' },
       });
 
@@ -220,7 +220,7 @@ Suggest 3-5 additional tasks that would help achieve this goal. Return JSON:
   ): Promise<string> {
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
+        model: 'gpt-5-nano',
         messages: [
           {
             role: 'system',
@@ -235,7 +235,7 @@ Progress: ${progress}%
 Write a brief, personalized motivational message (2-3 sentences).`,
           },
         ],
-        temperature: 0.8,
+        temperature: 1,
         max_tokens: 150,
       });
 

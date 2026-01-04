@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import prisma from '../config/database';
 import { AuthRequest } from '../middleware/auth';
-import { aiService } from '../services/ai/aiService';
+import { agentService } from '../services/agent/agentService';
 import { Goal, Task, Milestone } from '@prisma/client';
 
 type GoalWithRelations = Goal & {
@@ -94,8 +94,8 @@ export const getGoal = async (req: AuthRequest, res: Response) => {
 
 export const createGoal = async (req: AuthRequest, res: Response) => {
   try {
-    const { title, description, type, targetDate, categoryId, priority } = req.body;
-
+    let { title, description, type, targetDate, categoryId, priority } = req.body;
+    console.log('##########Creating goal with data:', req.body);
     const goal = await prisma.goal.create({
       data: {
         title,
@@ -111,8 +111,15 @@ export const createGoal = async (req: AuthRequest, res: Response) => {
       },
     });
 
-    // Generate questionnaire for this goal type
-    const questionnaire = await aiService.generateQuestionnaire(type, title);
+    // Generate questionnaire for this goal type using agents
+    let questionnaire = [];
+    try {
+      questionnaire = await agentService.generateQuestionnaire(type, title, req.user!.id);
+    } catch (agentError) {
+      console.error('Agent questionnaire generation error:', agentError);
+      // Fallback to default questions if agent fails
+      questionnaire = getDefaultQuestions(type);
+    }
 
     res.status(201).json({
       goal,
@@ -123,6 +130,148 @@ export const createGoal = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: 'Failed to create goal' });
   }
 };
+
+// Default questions fallback when agent fails
+function getDefaultQuestions(goalType: string) {
+  const defaultQuestions: Record<string, any[]> = {
+    ACHIEVEMENT: [
+      { id: 'q1', question: 'What specific outcome do you want to achieve?', type: 'text', required: true },
+      { id: 'q2', question: 'When do you want to achieve this by?', type: 'date', required: true },
+      { id: 'q3', question: 'What resources do you have available?', type: 'text', required: false },
+    ],
+    LEARNING: [
+      { id: 'q1', question: 'What is your current skill level?', type: 'select', options: ['Complete beginner', 'Some basics', 'Intermediate', 'Advanced'], required: true },
+      { id: 'q2', question: 'How much time can you dedicate daily?', type: 'select', options: ['15 minutes', '30 minutes', '1 hour', '2+ hours'], required: true },
+      { id: 'q3', question: 'Do you have the necessary equipment/resources?', type: 'select', options: ['Yes', 'No', 'Partially'], required: true },
+    ],
+    HEALTH: [
+      { id: 'q1', question: 'What is your current activity level?', type: 'select', options: ['Sedentary', 'Lightly active', 'Moderately active', 'Very active'], required: true },
+      { id: 'q2', question: 'Do you have any health conditions or limitations?', type: 'text', required: false },
+      { id: 'q3', question: 'How much time can you exercise per day?', type: 'select', options: ['15 minutes', '30 minutes', '45 minutes', '1 hour+'], required: true },
+    ],
+    HABIT: [
+      { id: 'q1', question: 'Why is this habit important to you?', type: 'text', required: true },
+      { id: 'q2', question: 'What time of day works best?', type: 'select', options: ['Morning', 'Afternoon', 'Evening', 'Flexible'], required: true },
+      { id: 'q3', question: 'Have you tried building this habit before?', type: 'select', options: ['Yes, successfully', 'Yes, but failed', 'No, first time'], required: true },
+    ],
+    FINANCIAL: [
+      { id: 'q1', question: 'What is your target amount?', type: 'number', required: true },
+      { id: 'q2', question: 'What is your timeline?', type: 'date', required: true },
+      { id: 'q3', question: 'What is your current monthly savings capacity?', type: 'number', required: false },
+    ],
+    CAREER: [
+      { id: 'q1', question: 'What is your target role/position?', type: 'text', required: true },
+      { id: 'q2', question: 'What is your current experience level?', type: 'select', options: ['Entry level', 'Mid level', 'Senior', 'Executive'], required: true },
+      { id: 'q3', question: 'What skills do you need to develop?', type: 'text', required: true },
+    ],
+    PERSONAL: [
+      { id: 'q1', question: 'What area of life does this improve?', type: 'select', options: ['Relationships', 'Mental health', 'Confidence', 'Work-life balance', 'Other'], required: true },
+      { id: 'q2', question: 'What does success look like for you?', type: 'text', required: true },
+      { id: 'q3', question: 'What has held you back before?', type: 'text', required: false },
+    ],
+  };
+  return defaultQuestions[goalType] || defaultQuestions.ACHIEVEMENT;
+}
+
+// Default plan fallback when agent fails
+function getDefaultPlan(goalType: string, goalTitle: string, answers: Record<string, any>) {
+  const isHabit = goalType === 'HABIT';
+  
+  return {
+    milestones: [
+      {
+        title: 'Getting Started',
+        description: 'Begin your journey towards ' + goalTitle,
+        targetDate: null,
+        tasks: [
+          {
+            title: 'Research and prepare',
+            description: 'Gather resources and create an initial plan',
+            estimatedTime: 60,
+            priority: 'HIGH' as const,
+            isRecurring: false,
+            recurrenceRule: null,
+            tips: 'Start by understanding what you need to succeed',
+          },
+          {
+            title: 'Set up your environment',
+            description: 'Prepare everything you need to start',
+            estimatedTime: 30,
+            priority: 'MEDIUM' as const,
+            isRecurring: false,
+            recurrenceRule: null,
+            tips: 'Remove distractions and set yourself up for success',
+          },
+        ],
+      },
+      {
+        title: 'Building Momentum',
+        description: 'Establish consistent progress',
+        targetDate: null,
+        tasks: [
+          {
+            title: isHabit ? 'Daily practice session' : 'Work on core tasks',
+            description: isHabit ? 'Complete your daily habit practice' : 'Focus on the main activities',
+            estimatedTime: 30,
+            priority: 'HIGH' as const,
+            isRecurring: isHabit,
+            recurrenceRule: isHabit ? 'FREQ=DAILY' : null,
+            tips: 'Consistency is more important than intensity',
+          },
+          {
+            title: 'Weekly review',
+            description: 'Review your progress and adjust as needed',
+            estimatedTime: 15,
+            priority: 'MEDIUM' as const,
+            isRecurring: true,
+            recurrenceRule: 'FREQ=WEEKLY',
+            tips: 'Celebrate wins and learn from challenges',
+          },
+        ],
+      },
+      {
+        title: 'Achieving Your Goal',
+        description: 'Final push to complete ' + goalTitle,
+        targetDate: null,
+        tasks: [
+          {
+            title: 'Advanced practice',
+            description: 'Take your skills/progress to the next level',
+            estimatedTime: 45,
+            priority: 'MEDIUM' as const,
+            isRecurring: isHabit,
+            recurrenceRule: isHabit ? 'FREQ=DAILY' : null,
+            tips: 'Push yourself but stay sustainable',
+          },
+        ],
+      },
+    ],
+    habits: isHabit ? [
+      {
+        title: goalTitle,
+        description: 'Daily habit practice',
+        frequency: 'DAILY' as const,
+        targetPerPeriod: 1,
+        reminderTime: answers['What time of day works best?'] === 'Morning' ? '08:00' : 
+                      answers['What time of day works best?'] === 'Evening' ? '19:00' : '14:00',
+      },
+    ] : undefined,
+    tips: [
+      'Start small and build up gradually',
+      'Track your progress daily',
+      'Celebrate small wins',
+      'Be patient with yourself',
+    ],
+    warnings: [
+      'Don\'t try to do too much at once',
+      'Missing a day is okay - just get back on track',
+    ],
+    resources: [
+      'Set up reminders on your phone',
+      'Find an accountability partner',
+    ],
+  };
+}
 
 export const updateGoal = async (req: AuthRequest, res: Response) => {
   try {
@@ -195,13 +344,27 @@ export const generatePlan = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Goal not found' });
     }
 
-    // Generate plan using AI
-    const plan = await aiService.generatePlan(
-      goal.type,
-      goal.title,
-      goal.description,
-      answers
-    );
+    // Generate plan using AI agents with fallback
+    let plan;
+    try {
+      plan = await agentService.generatePlan(
+        goal.type,
+        goal.title,
+        goal.description,
+        answers,
+        req.user!.id
+      );
+    } catch (agentError) {
+      console.error('Agent plan generation failed:', agentError);
+      // Use fallback plan
+      plan = getDefaultPlan(goal.type, goal.title, answers);
+    }
+
+    // Validate plan has milestones
+    if (!plan || !plan.milestones || plan.milestones.length === 0) {
+      console.error('Plan has no milestones, using fallback');
+      plan = getDefaultPlan(goal.type, goal.title, answers);
+    }
 
     // Save AI context
     await prisma.goal.update({
@@ -230,11 +393,18 @@ export const generatePlan = async (req: AuthRequest, res: Response) => {
       // Create tasks for this milestone
       for (let j = 0; j < milestone.tasks.length; j++) {
         const task = milestone.tasks[j];
+        
+        // Map priority to valid Prisma enum (handle any AI edge cases)
+        const validPriorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+        let priority = task.priority?.toUpperCase() || 'MEDIUM';
+        if (priority === 'CRITICAL') priority = 'URGENT';
+        if (!validPriorities.includes(priority)) priority = 'MEDIUM';
+        
         await prisma.task.create({
           data: {
             title: task.title,
             description: task.description,
-            priority: task.priority,
+            priority: priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT',
             estimatedTime: task.estimatedTime,
             isRecurring: task.isRecurring,
             recurrenceRule: task.recurrenceRule,

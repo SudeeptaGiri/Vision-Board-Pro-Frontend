@@ -31,7 +31,13 @@ router.post(
     body('title').trim().notEmpty().isLength({ max: 200 }),
     body('description').optional().trim(),
     body('type').isIn(['ACHIEVEMENT', 'LEARNING', 'HEALTH', 'HABIT', 'FINANCIAL', 'CAREER', 'PERSONAL']),
-    body('targetDate').optional().isISO8601(),
+    body('targetDate').optional({ nullable: true }).custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      // Check if it's a valid ISO8601 date
+      const date = new Date(value);
+      if (isNaN(date.getTime())) throw new Error('Invalid date format');
+      return true;
+    }),
     body('categoryId').optional().isString(),
   ],
   validate,
@@ -45,7 +51,12 @@ router.put(
     body('title').optional().trim().notEmpty().isLength({ max: 200 }),
     body('description').optional().trim(),
     body('status').optional().isIn(['NOT_STARTED', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'ABANDONED']),
-    body('targetDate').optional().isISO8601(),
+    body('targetDate').optional({ nullable: true }).custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      const date = new Date(value);
+      if (isNaN(date.getTime())) throw new Error('Invalid date format');
+      return true;
+    }),
   ],
   validate,
   goalController.updateGoal

@@ -44,4 +44,47 @@ router.post(
 // Get motivational message
 router.get('/motivation/:goalId', aiController.getMotivation);
 
+// ============= New Agent-Powered Endpoints =============
+
+// Classify a goal (determine category, complexity, if habit-based)
+router.post(
+  '/classify-goal',
+  [body('goalTitle').trim().notEmpty()],
+  validate,
+  aiController.classifyGoal
+);
+
+// Process a new goal (classify + generate questions in one call)
+router.post(
+  '/process-goal',
+  [body('goalTitle').trim().notEmpty()],
+  validate,
+  aiController.processGoal
+);
+
+// Analyze progress on a goal
+router.get('/analyze-progress/:goalId', aiController.analyzeProgress);
+
+// Estimate timeline for a goal
+router.post(
+  '/estimate-timeline',
+  [
+    body('goalId').isString(),
+    body('hoursPerWeek').optional().isNumeric(),
+  ],
+  validate,
+  aiController.estimateTimeline
+);
+
+// Orchestrate - determine what action to take based on user message
+router.post(
+  '/orchestrate',
+  [
+    body('message').trim().notEmpty(),
+    body('goalId').optional().isString(),
+  ],
+  validate,
+  aiController.orchestrate
+);
+
 export default router;
