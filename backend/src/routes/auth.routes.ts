@@ -27,6 +27,16 @@ router.post(
   authController.login
 );
 
+// Email verification routes
+router.get('/verify-email', authController.verifyEmail);
+
+router.post(
+  '/resend-verification',
+  [body('email').isEmail().normalizeEmail()],
+  validate,
+  authController.resendVerification
+);
+
 router.get('/me', authenticate, authController.getMe);
 
 router.put(

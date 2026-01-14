@@ -27,6 +27,12 @@ export const config = {
     apiSecret: process.env.CLOUDINARY_API_SECRET,
   },
   
+  // SendGrid Email Configuration
+  email: {
+    sendgridApiKey: process.env.SENDGRID_API_KEY || '',
+    fromEmail: process.env.FROM_EMAIL || 'sudeeptagiri22@gmail.com',
+  },
+  
   frontend: {
     url: process.env.FRONTEND_URL || 'http://localhost:3000',
   },

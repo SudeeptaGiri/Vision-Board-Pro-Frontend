@@ -196,7 +196,16 @@ export const logHabit = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ error: 'Habit not found' });
     }
 
-    const logDate = new Date(date);
+    // Parse date - handle both YYYY-MM-DD and ISO formats
+    let logDate: Date;
+    if (date.includes('T')) {
+      // ISO format - convert to local date
+      logDate = new Date(date);
+    } else {
+      // YYYY-MM-DD format - parse as local date
+      const [year, month, day] = date.split('-').map(Number);
+      logDate = new Date(year, month - 1, day);
+    }
     logDate.setHours(0, 0, 0, 0);
 
     // Upsert the log

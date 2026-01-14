@@ -21,12 +21,12 @@ router.get('/:id/stats', habitController.getHabitStats);
 router.post(
   '/',
   [
-    body('title').trim().notEmpty(),
+    body('title').trim().notEmpty().withMessage('Title is required'),
     body('description').optional().trim(),
     body('frequency').optional().isIn(['DAILY', 'WEEKLY', 'MONTHLY']),
     body('targetPerPeriod').optional().isInt({ min: 1 }),
-    body('color').optional().isHexColor(),
-    body('reminderTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
+    body('color').optional().matches(/^#[0-9A-Fa-f]{6}$/).withMessage('Invalid color format'),
+    body('reminderTime').optional({ checkFalsy: true }).matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
   ],
   validate,
   habitController.createHabit

@@ -1,9 +1,16 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import prisma from '../config/database';
 import { config } from '../config/env';
 import { AuthRequest } from '../middleware/auth';
+import { sendVerificationEmail } from '../services/email/emailService';
+
+// Generate verification token using crypto
+const generateVerificationToken = (): string => {
+  return crypto.randomBytes(32).toString('hex');
+};
 
 export const register = async (req: Request, res: Response) => {
   try {
@@ -21,17 +28,23 @@ export const register = async (req: Request, res: Response) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Generate verification token
+    const verificationToken = generateVerificationToken();
+
+    // Create user with isVerified = false
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
+        isVerified: false,
+        verificationToken,
       },
       select: {
         id: true,
         email: true,
         name: true,
+        isVerified: true,
         createdAt: true,
       },
     });
@@ -56,16 +69,24 @@ export const register = async (req: Request, res: Response) => {
       },
     });
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      config.jwt.secret,
-      { expiresIn: '7d' }
-    );
+    // Send verification email
+    try {
+      await sendVerificationEmail(user.email, user.name, verificationToken);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't fail registration if email fails, user can request resend
+    }
 
+    // Return success without token (user must verify first)
     res.status(201).json({
-      user,
-      token,
+      message: 'Registration successful. Please check your email to verify your account.',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isVerified: user.isVerified,
+      },
+      requiresVerification: true,
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -93,6 +114,15 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if email is verified
+    if (!user.isVerified) {
+      return res.status(403).json({ 
+        error: 'Please verify your email before logging in',
+        requiresVerification: true,
+        email: user.email,
+      });
+    }
+
     // Generate token
     const token = jwt.sign(
       { userId: user.id, email: user.email },
@@ -106,6 +136,7 @@ export const login = async (req: Request, res: Response) => {
         email: user.email,
         name: user.name,
         avatar: user.avatar,
+        isVerified: user.isVerified,
       },
       token,
     });
@@ -164,4 +195,99 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
 export const logout = async (req: AuthRequest, res: Response) => {
   // In a more complex setup, you might want to blacklist the token
   res.json({ message: 'Logged out successfully' });
+};
+
+// Verify email with token
+export const verifyEmail = async (req: Request, res: Response) => {
+  try {
+    const { token } = req.query;
+
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Invalid verification token' });
+    }
+
+    // Find user with this token
+    const user = await prisma.user.findUnique({
+      where: { verificationToken: token },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired verification token' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'Email already verified' });
+    }
+
+    // Update user to verified and clear token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        isVerified: true,
+        verificationToken: null,
+      },
+    });
+
+    // Generate JWT token so user can login immediately
+    const jwtToken = jwt.sign(
+      { userId: user.id, email: user.email },
+      config.jwt.secret,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Email verified successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        isVerified: true,
+      },
+      token: jwtToken,
+    });
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+};
+
+// Resend verification email
+export const resendVerification = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({ message: 'If an account exists with this email, a verification link has been sent.' });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({ error: 'Email is already verified' });
+    }
+
+    // Generate new token
+    const verificationToken = generateVerificationToken();
+
+    // Update user with new token
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { verificationToken },
+    });
+
+    // Send new verification email
+    await sendVerificationEmail(user.email, user.name, verificationToken);
+
+    res.json({ message: 'Verification email sent. Please check your inbox (and spam folder).' });
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Failed to resend verification email' });
+  }
 };

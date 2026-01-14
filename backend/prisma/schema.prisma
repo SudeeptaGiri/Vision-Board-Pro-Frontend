@@ -10,17 +10,20 @@ datasource db {
 // ==================== USER & AUTH ====================
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String
-  name          String
-  avatar        String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  password            String
+  name                String
+  avatar              String?
+  isVerified          Boolean   @default(false)
+  verificationToken   String?   @unique
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // Relations
   goals         Goal[]
-  visionBoards  VisionBoard[]
+  visionBoards   VisionBoard[]
+  uploadedImages UploadedImage[]
   habits        Habit[]
   categories    Category[]
   streaks       Streak[]
@@ -253,57 +256,66 @@ model Streak {
 // ==================== VISION BOARD ====================
 
 model VisionBoard {
-  id              String       @id @default(cuid())
+  id              String        @id @default(cuid())
   title           String
   description     String?
-  isDefault       Boolean      @default(false)
-  background      String?      // Background image or color
-  backgroundColor String?      @default("#f8fafc")
-  theme           String?      @default("default")
-  layout          Json?        // Grid layout configuration
-  
+  theme           String        @default("default")
+  backgroundColor String        @default("#f8fafc")
+  background      String?       // For gradient backgrounds
+  isDefault       Boolean       @default(false)
   userId          String
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   items           VisionItem[]
-  
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  uploadedImages  UploadedImage[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  @@map("vision_boards")
+  @@index([userId])
 }
 
 model VisionItem {
-  id              String    @id @default(cuid())
-  type            VisionItemType
-  title           String?
-  imageUrl        String?
-  imagePublicId   String?   // Cloudinary public ID for deletion
-  quote           String?
-  
-  // Position & Size
-  positionX       Int       @default(0)
-  positionY       Int       @default(0)
-  width           Int       @default(200)
-  height          Int       @default(200)
-  rotation        Int       @default(0)
-  zIndex          Int       @default(1)
-  order           Int       @default(0)
-  
-  // Styling
-  style           Json?     // Custom styles
-  
-  visionBoardId   String
-  goalId          String?   // Link to a goal
-  
-  visionBoard     VisionBoard @relation(fields: [visionBoardId], references: [id], onDelete: Cascade)
-  goal            Goal?       @relation(fields: [goalId], references: [id])
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String      @id @default(cuid())
+  type          String      // IMAGE, TEXT, QUOTE, GOAL_CARD
+  title         String?
+  quote         String?
+  imageUrl      String?
+  imageKey      String?     // S3 key for deletion
+  positionX     Float       @default(0)
+  positionY     Float       @default(0)
+  width         Float       @default(200)
+  height        Float       @default(200)
+  rotation      Float       @default(0)
+  zIndex        Int         @default(1)
+  order         Int         @default(0)
+  visionBoardId String
+  visionBoard   VisionBoard @relation(fields: [visionBoardId], references: [id], onDelete: Cascade)
+  goalId        String?
+  goal          Goal?       @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
-  @@map("vision_items")
+  @@index([visionBoardId])
+  @@index([goalId])
 }
+
+model UploadedImage {
+  id            String       @id @default(cuid())
+  key           String       // S3 object key
+  url           String       // Public URL
+  fileName      String?
+  fileSize      Int?
+  mimeType      String?
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visionBoardId String?
+  visionBoard   VisionBoard? @relation(fields: [visionBoardId], references: [id], onDelete: SetNull)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([userId])
+  @@index([visionBoardId])
+}
+
 
 enum VisionItemType {
   IMAGE
